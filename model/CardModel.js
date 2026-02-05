@@ -3,12 +3,10 @@ export class CardModel {
     constructor() {
         this.texts = [];
         this.selectedIdx = null;
-        this.image = null;
-        this.imageX = 0;
-        this.imageY = 0;
-        this.imageWidth = 500;
-        this.imageHeight = 300;
-        this.imageRotation = 0; // graus
+        // elementos: podem ser imagens ou shapes
+        // cada elemento: { type: 'image'|'shape', x,y,width,height, rotation, ... }
+        this.elements = [];
+        this.selectedElementIdx = null;
         this.savedCards = this.loadSavedCards();
     }
 
@@ -44,43 +42,69 @@ export class CardModel {
     deleteText(idx) {
         this.texts.splice(idx, 1);
     }
-    setImage(img) {
-        this.image = img;
-        this.imageX = 0;
-        this.imageY = 0;
+    // elementos (imagens / shapes)
+    addImage(img, x = 0, y = 0, w = 500, h = 300, rotation = 0) {
+        this.elements.push({ type: 'image', image: img, x, y, width: w, height: h, rotation });
+        this.selectedElementIdx = this.elements.length - 1;
     }
-    deleteImage() {
-        this.image = null;
-        this.imageX = 0;
-        this.imageY = 0;
-        this.imageWidth = 500;
-        this.imageHeight = 300;
-        this.imageRotation = 0;
+    addShape(shapeType, x, y, w, h, options = {}) {
+        const el = {
+            type: 'shape',
+            shape: shapeType, // 'rect', 'bar', 'arrow'
+            x, y, width: w, height: h,
+            rotation: options.rotation || 0,
+            fill: !!options.fill,
+            color: options.color || '#000'
+        };
+        this.elements.push(el);
+        this.selectedElementIdx = this.elements.length - 1;
     }
-    setImagePosition(x, y) {
-        this.imageX = x;
-        this.imageY = y;
+    deleteElement(idx) {
+        if (idx >= 0 && idx < this.elements.length) {
+            this.elements.splice(idx, 1);
+            if (this.selectedElementIdx === idx) this.selectedElementIdx = null;
+        }
     }
-    setImageSize(w, h) {
-        this.imageWidth = w;
-        this.imageHeight = h;
+    setElementPosition(idx, x, y) {
+        if (idx !== null && idx >= 0 && idx < this.elements.length) {
+            this.elements[idx].x = x;
+            this.elements[idx].y = y;
+        }
+    }
+    setElementSize(idx, w, h) {
+        if (idx !== null && idx >= 0 && idx < this.elements.length) {
+            this.elements[idx].width = w;
+            this.elements[idx].height = h;
+        }
+    }
+    setElementRotation(idx, deg) {
+        if (idx !== null && idx >= 0 && idx < this.elements.length) {
+            this.elements[idx].rotation = deg;
+        }
+    }
+    setElementColor(idx, color) {
+        if (idx !== null && idx >= 0 && idx < this.elements.length) {
+            this.elements[idx].color = color;
+        }
     }
     setTextRotation(deg) {
         if (this.selectedIdx !== null) this.texts[this.selectedIdx].rotation = deg;
     }
     setImageRotation(deg) {
-        this.imageRotation = deg;
+        // backwards compat: if single image stored in elements, update selected element
+        if (this.selectedElementIdx !== null && this.elements[this.selectedElementIdx] && this.elements[this.selectedElementIdx].type === 'image') {
+            this.elements[this.selectedElementIdx].rotation = deg;
+        }
     }
 
     saveCard() {
         this.savedCards.push({
             texts: JSON.parse(JSON.stringify(this.texts)),
-            image: this.image ? this.image.src : null,
-            imageX: this.imageX,
-            imageY: this.imageY,
-            imageWidth: this.imageWidth,
-            imageHeight: this.imageHeight,
-            imageRotation: this.imageRotation,
+            elements: JSON.parse(JSON.stringify(this.elements, (k, v) => {
+                // replace image objects with src
+                if (k === 'image' && v && v.src) return v.src;
+                return v;
+            })),
             name: 'Sem nome'
         });
         localStorage.setItem('savedCards', JSON.stringify(this.savedCards));
@@ -89,16 +113,21 @@ export class CardModel {
     saveCardWithName(name) {
         const card = {
             texts: JSON.parse(JSON.stringify(this.texts)),
-            image: this.image ? this.image.src : null,
-            imageX: this.imageX,
-            imageY: this.imageY,
-            imageWidth: this.imageWidth,
-            imageHeight: this.imageHeight,
-            imageRotation: this.imageRotation,
+            elements: JSON.parse(JSON.stringify(this.elements, (k, v) => {
+                if (k === 'image' && v && v.src) return v.src;
+                return v;
+            })),
             name: name || 'Sem nome'
         };
         this.savedCards.push(card);
         localStorage.setItem('savedCards', JSON.stringify(this.savedCards));
+    }
+
+    updateSaved(idx, card) {
+        if (idx >= 0 && idx < this.savedCards.length) {
+            this.savedCards[idx] = card;
+            localStorage.setItem('savedCards', JSON.stringify(this.savedCards));
+        }
     }
 
     deleteSaved(idx) {

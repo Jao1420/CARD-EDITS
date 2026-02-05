@@ -14,36 +14,59 @@ export class CardView {
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
         this.ctx.fillStyle = '#fff';
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-        if (model.image) {
-            // desenha imagem aplicando rotação
-            this.ctx.save();
-            const cx = model.imageX + model.imageWidth / 2;
-            const cy = model.imageY + model.imageHeight / 2;
-            this.ctx.translate(cx, cy);
-            this.ctx.rotate((model.imageRotation || 0) * Math.PI / 180);
-            this.ctx.drawImage(model.image, -model.imageWidth / 2, -model.imageHeight / 2, model.imageWidth, model.imageHeight);
-            this.ctx.restore();
+        // desenha elementos primeiro (imagens / shapes)
+        if (model.elements && model.elements.length) {
+            model.elements.forEach((el, eidx) => {
+                this.ctx.save();
+                const cx = el.x + el.width / 2;
+                const cy = el.y + el.height / 2;
+                this.ctx.translate(cx, cy);
+                this.ctx.rotate((el.rotation || 0) * Math.PI / 180);
+                if (el.type === 'image' && el.image && (el.image instanceof HTMLImageElement)) {
+                    this.ctx.drawImage(el.image, -el.width / 2, -el.height / 2, el.width, el.height);
+                } else if (el.type === 'shape') {
+                    this.ctx.fillStyle = el.color || '#000';
+                    this.ctx.strokeStyle = el.color || '#000';
+                    this.ctx.lineWidth = 2;
+                    const w = el.width;
+                    const h = el.height;
+                    if (el.shape === 'rect' || el.shape === 'bar') {
+                        if (el.fill) this.ctx.fillRect(-w/2, -h/2, w, h);
+                        else this.ctx.strokeRect(-w/2, -h/2, w, h);
+                    } else if (el.shape === 'arrow') {
+                        // simple arrow: a line with triangle head
+                        this.ctx.beginPath();
+                        this.ctx.moveTo(-w/2, 0);
+                        this.ctx.lineTo(w/2 - 10, 0);
+                        this.ctx.stroke();
+                        this.ctx.beginPath();
+                        this.ctx.moveTo(w/2 - 10, -6);
+                        this.ctx.lineTo(w/2, 0);
+                        this.ctx.lineTo(w/2 - 10, 6);
+                        this.ctx.closePath();
+                        if (el.fill) this.ctx.fill(); else this.ctx.stroke();
+                    }
+                }
 
-            // Desenha handle de redimensionamento no canto inferior direito (transform handle position considering rotation: draw at bbox corner)
-            // For simplicity, show handle at unrotated bbox corner
-            this.imageResizeHandle.x = model.imageX + model.imageWidth;
-            this.imageResizeHandle.y = model.imageY + model.imageHeight;
-            this.ctx.fillStyle = '#667eea';
-            this.ctx.fillRect(
-                model.imageX + model.imageWidth - this.imageResizeHandle.size,
-                model.imageY + model.imageHeight - this.imageResizeHandle.size,
-                this.imageResizeHandle.size,
-                this.imageResizeHandle.size
-            );
-            this.ctx.strokeStyle = '#fff';
-            this.ctx.lineWidth = 2;
-            this.ctx.strokeRect(
-                model.imageX + model.imageWidth - this.imageResizeHandle.size,
-                model.imageY + model.imageHeight - this.imageResizeHandle.size,
-                this.imageResizeHandle.size,
-                this.imageResizeHandle.size
-            );
+                // draw resize handle for selected element
+                if (model.selectedElementIdx === eidx) {
+                    this.ctx.restore(); // restore rotation to draw handle in screen space
+                    const hx = el.x + el.width;
+                    const hy = el.y + el.height;
+                    const size = this.imageResizeHandle.size;
+                    this.imageResizeHandle.x = hx;
+                    this.imageResizeHandle.y = hy;
+                    this.ctx.fillStyle = '#667eea';
+                    this.ctx.fillRect(hx - size, hy - size, size, size);
+                    this.ctx.strokeStyle = '#fff';
+                    this.ctx.lineWidth = 2;
+                    this.ctx.strokeRect(hx - size, hy - size, size, size);
+                } else {
+                    this.ctx.restore();
+                }
+            });
         }
+
         model.texts.forEach((t, idx) => {
             this.ctx.save();
             this.ctx.translate(t.x, t.y);
@@ -66,25 +89,27 @@ export class CardView {
         });
     }
 
-    isMouseOnImageResizeHandle(x, y, model) {
-        if (!model.image) return false;
-        const handle = this.imageResizeHandle;
-        return (
-            x > model.imageX + model.imageWidth - handle.size &&
-            x < model.imageX + model.imageWidth &&
-            y > model.imageY + model.imageHeight - handle.size &&
-            y < model.imageY + model.imageHeight
-        );
+    // retorna o índice do elemento cujo handle de resize contém (x,y), ou null
+    getElementResizeHandleAt(x, y, model) {
+        if (!model.elements) return null;
+        const size = this.imageResizeHandle.size;
+        for (let i = 0; i < model.elements.length; i++) {
+            const el = model.elements[i];
+            const hx = el.x + el.width;
+            const hy = el.y + el.height;
+            if (x > hx - size && x < hx && y > hy - size && y < hy) return i;
+        }
+        return null;
     }
 
-    isMouseOnImage(x, y, model) {
-        if (!model.image) return false;
-        return (
-            x > model.imageX &&
-            x < model.imageX + model.imageWidth &&
-            y > model.imageY &&
-            y < model.imageY + model.imageHeight
-        );
+    // retorna o índice do elemento sob (x,y) ou null
+    getElementAt(x, y, model) {
+        if (!model.elements) return null;
+        for (let i = model.elements.length - 1; i >= 0; i--) {
+            const el = model.elements[i];
+            if (x > el.x && x < el.x + el.width && y > el.y && y < el.y + el.height) return i;
+        }
+        return null;
     }
 
     renderSavedCards(savedCards, onSelect, onDelete) {
@@ -125,6 +150,10 @@ export class CardView {
             }
             this.fontSizeInput.value = t.fontSize;
             this.colorInput.value = t.color;
+        } else if (model.selectedElementIdx !== null && model.elements[model.selectedElementIdx]) {
+            const el = model.elements[model.selectedElementIdx];
+            // when an element is selected, show its color in the color input
+            if (this.colorInput) this.colorInput.value = el.color || '#000';
         } else {
             // Só limpa se não há seleção e o campo não está em foco
             if (document.activeElement !== this.textInput) {

@@ -11,6 +11,14 @@ window.addEventListener('DOMContentLoaded', () => {
     const deleteBtn = document.getElementById('deleteBtn');
     const rotateLeftBtn = document.getElementById('rotateLeftBtn');
     const rotateRightBtn = document.getElementById('rotateRightBtn');
+    const saveChangesBtn = document.getElementById('saveChangesBtn');
+    const newModelBtn = document.getElementById('newModelBtn');
+    const toast = document.getElementById('toast');
     const rotationInput = document.getElementById('rotationInput');
-    new CardController(canvas, textInput, fontSizeInput, colorInput, saveCardBtn, savedCardsList, deleteBtn, rotateLeftBtn, rotateRightBtn, rotationInput, cardNameInput);
+    const controller = new CardController(canvas, textInput, fontSizeInput, colorInput, saveCardBtn, savedCardsList, deleteBtn, rotateLeftBtn, rotateRightBtn, rotationInput, cardNameInput, saveChangesBtn, newModelBtn);
+    // pass toast element into controller instance and expose controller globally for quick access
+    if (controller) {
+        controller.toast = toast;
+        window.cardController = controller;
+    }
 });
